@@ -124,8 +124,9 @@ df1 <- get(paste0("raw_Development_Activity_Monitor_", today)) %>%
   transmute(block_year = paste0(clue_block,"_", year_completed),
             clue_small_area = factor(ifelse(clue_small_area == "Melbourne (CBD)", "CBD",
                                      ifelse(clue_small_area == "Docklands", "Docklands", "Elsewhere"))),
-            development_key,
-            year_completed, clue_block, street_address,
+            block_id = clue_block,
+            development_key, 
+            year_completed, street_address,
             studio_dwe, one_bdrm_dwe, two_bdrm_dwe, three_bdrm_dwe,
             student_apartments, student_beds,
             total_dwellings = studio_dwe + one_bdrm_dwe + two_bdrm_dwe +
@@ -139,15 +140,40 @@ development_applications <- df1 %>%
 
 st_write(development_applications, "../output/development_applications.shp", driver="ESRI Shapefile", delete_layer =TRUE)
 
-# Aggregated data for Sisi  
+# Aggregated data for Sisi
+st_write(development_applications, "../sisi_data/development_applications.shp", driver="ESRI Shapefile", delete_layer =TRUE)
+
 df2 <- df1 %>%
-  filter(total_dwellings == 0) %>%
-  group_by(block_year) %>%
-  summarise(ev_non_residential_bays = sum(car_spaces))
+  filter(total_dwellings < 1) %>%
+  group_by(year_completed, block_id) %>%
+  summarise(ev_non_residential_bays = sum(car_spaces)) %>% 
+  transmute(block_id,
+            year_completed,
+            ev_non_residential_bays) %>% 
+  filter(ev_non_residential_bays != 0,
+         year_completed > 2012,
+         year_completed < 2020) 
+
+write.csv(df2, file = "../sisi_data/non_residential_bays.csv")
+
+df3 <- df1 %>%
+  filter(total_dwellings > 0) %>%
+  group_by(year_completed, block_id) %>%
+  summarise(ev_residential_bays = sum(car_spaces)) %>% 
+  transmute(block_id,
+            year_completed,
+            ev_residential_bays) %>% 
+  filter(ev_residential_bays != 0,
+         year_completed > 2012,
+         year_completed < 2020)
+
+write.csv(df3, file = "../sisi_data/residential_bays.csv")
 
 analysis_data <- df1 %>%
-  filter(total_dwellings > 0) %>% 
-  group_by(block_year) %>%
+  filter(total_dwellings > 0,
+         year_completed > 2012,
+         year_completed < 2020) %>% 
+  group_by(year_completed, block_id) %>%
   summarise(clue_small_area = first(clue_small_area),
             total_dwellings = sum(total_dwellings),
             studio_dwe = sum(studio_dwe),
@@ -158,22 +184,26 @@ analysis_data <- df1 %>%
             student_beds = sum(student_beds),
             car_spaces = sum(car_spaces),
             bike_spaces = sum(bike_spaces)) %>%
-  transmute(block_year,
+  transmute(year_completed, block_id,
             ev_clue_small_area = clue_small_area,
             dv_parking_per_dwelling = car_spaces / total_dwellings,
             ev_percent_single_bedroom = (studio_dwe + one_bdrm_dwe) / total_dwellings * 100,
             ev_percent_two_bedrooms = two_bdrm_dwe / total_dwellings * 100,
             ev_percent_three_bedrooms = three_bdrm_dwe / total_dwellings * 100,
             ev_percent_student_accommodation = (student_apartments + student_beds) / total_dwellings * 100,
-            ev_bike_per_dwelling = bike_spaces / total_dwellings) %>%
-  full_join(clue_data, by = "block_year") %>% 
-  full_join(df2, by = "block_year")
+            ev_bike_per_dwelling = bike_spaces / total_dwellings)
 
 saveRDS(analysis_data, file = "../output/analysis_data.RData")
 
-write.csv(analysis_data, file = "../sisi_data/aggregated_data.csv")
+write.csv(analysis_data, file = "../sisi_data/analysis_data.csv")
 
-st_write(clue_blocks, "../sisi_data/blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
+df4 <- clue_data %>%
+  filter(census_year > 2012,
+         census_year < 2020)
+
+write.csv(df4, file = "../sisi_data/clue_data.csv")
+
+st_write(clue_blocks, "../sisi_data/clue_blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
 
 rm(list = ls(pattern = "raw_"))
 rm(list = ls(pattern = "df"))

@@ -65,11 +65,11 @@ ggplot(clue_blocks) +
 
 ```{r fig4, fig.asp=1, fig.cap="Figure 4. Parking Supply by CLUE Block over time"}
 df1 <- analysis_data %>% 
-  filter(census_year > 2012,
+  filter(year_completed > 2012,
          dv_parking_per_dwelling < 5) %>% 
-  select(census_year, dv_parking_per_dwelling, block_id, ev_clue_small_area)
+  select(year_completed, dv_parking_per_dwelling, block_id, ev_clue_small_area)
 
-ggplot(data = df1, mapping = aes(x = census_year, y = dv_parking_per_dwelling), alpha = 0.1) +
+ggplot(data = df1, mapping = aes(x = year_completed, y = dv_parking_per_dwelling), alpha = 0.1) +
   geom_line(aes(group = block_id, color = ev_clue_small_area)) +
   geom_smooth(method = "loess", se = FALSE, colour = "black", size=2) +
   geom_hline(yintercept = 1, colour = "black", linetype = "dashed") +
