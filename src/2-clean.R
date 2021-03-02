@@ -24,9 +24,7 @@ city_of_melbourne <- raw_LGA_2016_AUST %>%
   mutate(city = "City of Melbourne") %>%
   select(lga_name16, city)
 
-st_write(city_of_melbourne, "../outputs/city_of_melbourne.shp", driver="ESRI Shapefile", delete_layer =TRUE)
-st_write(city_of_melbourne, "../city_of_melbourne.shp", driver="ESRI Shapefile", delete_layer =TRUE)
-
+st_write(city_of_melbourne, "../output/city_of_melbourne.shp", driver="ESRI Shapefile", delete_layer =TRUE)
 
 # CLUE Data https://data.melbourne.vic.gov.au/stories/s/CLUE/rt3z-vy3t?src=hdr
 clue_blocks <- get('raw_geo_export_3f3122c2-4cfc-489b-8bd1-590a8876ad0b') %>%
@@ -35,9 +33,7 @@ clue_blocks <- get('raw_geo_export_3f3122c2-4cfc-489b-8bd1-590a8876ad0b') %>%
   select(block_id) %>%
   mutate(block_id = as.numeric(block_id))
 
-st_write(clue_blocks, "../outputs/clue_blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
-
-st_write(clue_blocks, "../clue_blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
+st_write(clue_blocks, "../output/clue_blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
 
 ## Cafes and Restaurants Seating https://data.melbourne.vic.gov.au/Business/Cafes-and-restaurants-with-seating-capacity/xt2y-tnn9
 clue_data <- get("raw_Cafes_and_restaurants__with_seating_capacity") %>%
@@ -120,27 +116,64 @@ clue_data <- get("raw_Floor_space_by_use_by_block") %>%
   filter(block_id != 0) %>%
   mutate(block_year = paste0(block_id,"_", census_year))
 
-saveRDS(clue_data, file = "../outputs/clue_data.RData")
-
-write.csv(clue_data, file = "../clue_blocks.csv")
+saveRDS(clue_data, file = "../output/clue_data.RData")
 
 # Development Applications https://data.melbourne.vic.gov.au/Property/Development-Activity-Monitor/gh7s-qda8
-development_applications <- raw_com_dev_app %>%
+df1 <- get(paste0("raw_Development_Activity_Monitor_", today)) %>%
   clean_names() %>%
   transmute(block_year = paste0(clue_block,"_", year_completed),
+            clue_small_area = factor(ifelse(clue_small_area == "Melbourne (CBD)", "CBD",
+                                     ifelse(clue_small_area == "Docklands", "Docklands", "Elsewhere"))),
             development_key,
             year_completed, clue_block, street_address,
-            resi_dwellings, studio_dwe, one_bdrm_dwe, two_bdrm_dwe, three_bdrm_dwe,
-            student_apartments, student_beds, student_accommodation_units,
+            studio_dwe, one_bdrm_dwe, two_bdrm_dwe, three_bdrm_dwe,
+            student_apartments, student_beds,
+            total_dwellings = studio_dwe + one_bdrm_dwe + two_bdrm_dwe +
+              three_bdrm_dwe + student_apartments + student_beds,
             car_spaces, bike_spaces,
             longitude, latitude) %>%
-  na.omit(year_completed) %>%
-  inner_join(clue_data, by = "block_year")
+  na.omit(year_completed)
 
-write.csv(development_applications, file = "../development_applications.csv")
+development_applications <- df1 %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = st_crs(city_of_melbourne))
 
-sf1 <- development_applications %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs = st_crs(city_of_melbourne)) %>%
-  select(development_key)
+st_write(development_applications, "../output/development_applications.shp", driver="ESRI Shapefile", delete_layer =TRUE)
 
-st_write(sf1, "../development_applications.shp", driver="ESRI Shapefile", delete_layer =TRUE)
+# Aggregated data for Sisi  
+df2 <- df1 %>%
+  filter(total_dwellings == 0) %>%
+  group_by(block_year) %>%
+  summarise(ev_non_residential_bays = sum(car_spaces))
+
+analysis_data <- df1 %>%
+  filter(total_dwellings > 0) %>% 
+  group_by(block_year) %>%
+  summarise(clue_small_area = first(clue_small_area),
+            total_dwellings = sum(total_dwellings),
+            studio_dwe = sum(studio_dwe),
+            one_bdrm_dwe = sum(one_bdrm_dwe),
+            two_bdrm_dwe = sum(two_bdrm_dwe),
+            three_bdrm_dwe = sum(three_bdrm_dwe),
+            student_apartments = sum(student_apartments),
+            student_beds = sum(student_beds),
+            car_spaces = sum(car_spaces),
+            bike_spaces = sum(bike_spaces)) %>%
+  transmute(block_year,
+            ev_clue_small_area = clue_small_area,
+            dv_parking_per_dwelling = car_spaces / total_dwellings,
+            ev_percent_single_bedroom = (studio_dwe + one_bdrm_dwe) / total_dwellings * 100,
+            ev_percent_two_bedrooms = two_bdrm_dwe / total_dwellings * 100,
+            ev_percent_three_bedrooms = three_bdrm_dwe / total_dwellings * 100,
+            ev_percent_student_accommodation = (student_apartments + student_beds) / total_dwellings * 100,
+            ev_bike_per_dwelling = bike_spaces / total_dwellings) %>%
+  full_join(clue_data, by = "block_year") %>% 
+  full_join(df2, by = "block_year")
+
+saveRDS(analysis_data, file = "../output/analysis_data.RData")
+
+write.csv(analysis_data, file = "../sisi_data/aggregated_data.csv")
+
+st_write(clue_blocks, "../sisi_data/blocks.shp", driver="ESRI Shapefile", delete_layer =TRUE)
+
+rm(list = ls(pattern = "raw_"))
+rm(list = ls(pattern = "df"))

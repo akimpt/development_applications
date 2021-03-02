@@ -39,11 +39,5 @@ vignettes/*.pdf
 .Renviron
 
 # Ignore folders
-*.zip
-*.csv
-*.accdb
-*.RData
-*.prj
-*.shp
-*.shx
-*.dbf
+/data/
+/output/

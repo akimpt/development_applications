@@ -1,0 +1,86 @@
+---
+title: "Development Application Figures"
+author: "Anthony Kimpton"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: word_document
+---
+
+```{r, include=FALSE, cache=FALSE}
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(knitr)
+require(viridis)
+
+my_palette <- RColorBrewer::brewer.pal(6, "Dark2")
+
+if (!exists("analysis_data")) {
+  setwd("./../src/")
+  source("./../src/2-clean.R")
+  setwd("./../analysis/")
+  print("...and now ready.")
+}
+
+ls()
+
+options(scipen = 999, digits = 3)
+opts_chunk$set(cache = FALSE, warning = FALSE,
+               echo = FALSE, message = FALSE,
+               include = TRUE, fig.width = 6, dpi = 600)
+
+```
+
+```{r fig1, fig.cap="Figure 1. Parking Maximums Zoning ([CoM 2008](https://www.melbourne.vic.gov.au/SiteCollectionDocuments/cbd-docklands-parking-plan-2008-2013.pdf))"}
+include_graphics("../data/parking_maximums.png")
+```
+
+```{r fig2, fig.cap="Figure 2. Development Applications by Year"}
+sf1 <- development_applications %>% 
+  filter(year_completed > 2012) %>%
+  transmute(year_completed = factor(year_completed))
+
+ggplot(clue_blocks) +
+  geom_sf(fill="lightgray", colour = "white") +
+  geom_sf(data = city_of_melbourne, colour = "black", fill=NA) +
+  geom_sf(data = sf1, aes(colour = year_completed), shape = 1) +
+  scale_color_viridis_d(end = 0.7, direction = -1, option = "inferno") +  
+  theme_void() +
+  labs(color = "Construction Completed")
+```
+
+```{r fig3, fig.cap= "Figure 3. Development Applications by Zone" }
+sf1 <- development_applications %>% 
+  filter(year_completed > 2012) %>%
+  transmute(clue_small_area = factor(clue_small_area))
+
+ggplot(clue_blocks) +
+  geom_sf(fill="lightgray", colour = "white") +
+  geom_sf(data = city_of_melbourne, colour = "black", fill=NA) +
+  geom_sf(data = sf1, aes(colour = clue_small_area), shape = 1) +
+  scale_color_viridis_d(end = 0.7, option = "viridis") +  
+  theme_void() +
+  labs(color = "Zone") +
+  theme(legend.position="bottom")
+```
+
+```{r fig4, fig.asp=1, fig.cap="Figure 4. Parking Supply by CLUE Block over time"}
+df1 <- analysis_data %>% 
+  filter(census_year > 2012,
+         dv_parking_per_dwelling < 5) %>% 
+  select(census_year, dv_parking_per_dwelling, block_id, ev_clue_small_area)
+
+ggplot(data = df1, mapping = aes(x = census_year, y = dv_parking_per_dwelling), alpha = 0.1) +
+  geom_line(aes(group = block_id, color = ev_clue_small_area)) +
+  geom_smooth(method = "loess", se = FALSE, colour = "black", size=2) +
+  geom_hline(yintercept = 1, colour = "black", linetype = "dashed") +
+  geom_text(aes(2016, 1, label = "CBD Parking Maximum", vjust = -0.3), colour = "black", size = 4) +
+  geom_hline(yintercept = 1.5, colour = "black", linetype = "dashed") +
+  geom_text(aes(2016, 1.5, label = "Docklands Parking Maximum", vjust = -0.3), colour = "black", size = 4) + 
+  ylim(0, 2) +
+  labs(x = "Approved Development Application Year",
+       y = "Parking Spaces per Dwelling",
+       color = "Zone") +
+  scale_color_viridis_d(end = 0.7, option = "viridis") + 
+  theme_bw() +
+  theme(legend.position="bottom")
+```
